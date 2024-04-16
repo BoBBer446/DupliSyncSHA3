@@ -35,8 +35,8 @@ cd python_copy2_image_duplicate_copy
 ```
 ## Verwendung des Scripts
 ```bash
-python sync_directories.py <Quellverzeichnis> <Zielverzeichnis> --move  # Für das Verschieben von Dateien
-python sync_directories.py <Quellverzeichnis> <Zielverzeichnis>         # Für das Kopieren von Dateien
+python sync_files.py <Quellverzeichnis> <Zielverzeichnis> --move  # Für das Verschieben von Dateien
+python sync_files.py <Quellverzeichnis> <Zielverzeichnis>         # Für das Kopieren von Dateien
 ```
 
 
