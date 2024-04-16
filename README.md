@@ -33,10 +33,11 @@ Klonen Sie das Repository und navigieren Sie in das Verzeichnis des Skripts:
 git clone https://github.com/BoBBer446/python_copy2_image_duplicate_copy
 cd python_copy2_image_duplicate_copy
 ```
-
+## Verwendung des Scripts
+```bash
 python sync_directories.py <Quellverzeichnis> <Zielverzeichnis> --move  # Für das Verschieben von Dateien
 python sync_directories.py <Quellverzeichnis> <Zielverzeichnis>         # Für das Kopieren von Dateien
-
+```
 
 
 ## Lizenz
