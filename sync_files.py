@@ -4,40 +4,30 @@ import logging
 from pathlib import Path
 import argparse
 import sys
+from tqdm import tqdm
+import os
+from multiprocessing import Pool, cpu_count
 
 # Konfiguration des Loggings mit Zeitstempel, Schweregrad der Meldung und Meldungstext
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def file_hash(filepath):
-    """
-    Berechnet den SHA-256 Hash einer Datei.
-    
-    Args:
-        filepath (Path): Der Pfad zur Datei, deren Hash berechnet werden soll.
-        
-    Returns:
-        str: Hexadezimaler Hashwert der Datei, oder None bei Lesefehlern.
-    """
     hasher = hashlib.sha256()
     try:
         with open(filepath, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hasher.update(chunk)
-        return hasher.hexdigest()
+        return filepath, hasher.hexdigest()
     except IOError as e:
         logging.error(f"Kann Datei nicht lesen {filepath}: {e}")
-        return None
+        return filepath, None
+
+def hash_files(file_paths):
+    with Pool(processes=cpu_count()) as pool:
+        results = list(tqdm(pool.imap(file_hash, file_paths), total=len(file_paths), desc="Hashing Dateien", unit="file"))
+    return dict(results)
 
 def get_total_size_of_files(file_list):
-    """
-    Berechnet die Gesamtgröße einer Liste von Dateien.
-    
-    Args:
-        file_list (list of Path): Liste von Dateipfaden, deren Größen addiert werden sollen.
-        
-    Returns:
-        int: Gesamtgröße der Dateien in Bytes.
-    """
     total_size = 0
     for file in file_list:
         try:
@@ -46,63 +36,36 @@ def get_total_size_of_files(file_list):
             logging.error(f"Kann Größe nicht lesen {file}: {e}")
     return total_size
 
-def disk_space_check(needed_space, target_directory):
-    """
-    Prüft, ob genügend Speicherplatz im Zielverzeichnis verfügbar ist.
-    
-    Args:
-        needed_space (int): Benötigter Speicherplatz in Bytes.
-        target_directory (Path): Zielverzeichnis.
-        
-    Returns:
-        bool: True, wenn genügend Platz vorhanden ist, sonst False.
-    """
-    total, used, free = shutil.disk_usage(target_directory)
-    logging.info(f"Verfügbarer Speicherplatz: {free // (1024 * 1024)} MB")
-    if needed_space > free:
-        logging.warning("Nicht genügend Speicherplatz verfügbar.")
-        return False
-    return True
-
 def sync_directories(source, target, mode):
-    """
-    Synchronisiert zwei Verzeichnisse, indem Dateien basierend auf ihren Hashwerten kopiert oder verschoben werden.
-    
-    Args:
-        source (str): Quellverzeichnis.
-        target (str): Zielverzeichnis.
-        mode (str): 'copy' für Kopieren, 'move' für Verschieben.
-    """
     source_dir = Path(source)
     target_dir = Path(target)
-    source_files = {file_hash(file): file for file in source_dir.rglob('*') if file.is_file()}
-    target_files = {file_hash(file) for file in target_dir.rglob('*') if file.is_file()}
-    skipped_files = []
 
-    files_to_copy = []
-    for hsh, src in source_files.items():
-        if src and hsh not in target_files:
-            files_to_copy.append(src)
-        else:
-            skipped_files.append(src)
+    source_files = list(source_dir.rglob('*'))
+    target_files = list(target_dir.rglob('*'))
 
+    logging.info("Hashing der Dateien im Quellverzeichnis...")
+    source_hashes = hash_files([file for file in source_files if file.is_file()])
+    logging.info("Hashing der Dateien im Zielverzeichnis...")
+    target_hashes = set(hash_files([file for file in target_files if file.is_file()]).values())
+
+    files_to_copy = [file for file, hash_val in source_hashes.items() if hash_val and hash_val not in target_hashes]
     total_size_needed = get_total_size_of_files(files_to_copy)
-    total_skipped_size = get_total_size_of_files(skipped_files)
 
     logging.info(f"Benötigter Speicherplatz: {total_size_needed // (1024 * 1024)} MB")
-    logging.info(f"Übersprungene Dateien: {len(skipped_files)}, Gesamtgröße: {total_skipped_size // (1024 * 1024)} MB")
 
-    if not disk_space_check(total_size_needed, target):
-        return
+    if mode == 'copy' or not os.stat(source_dir).st_dev == os.stat(target_dir).st_dev:
+        if not disk_space_check(total_size_needed, target):
+            return
 
-    for file_path in files_to_copy:
+    logging.info("Übertrage Dateien...")
+    for file_path in tqdm(files_to_copy, desc="Dateien übertragen", unit="file"):
         target_path = target_dir / file_path.relative_to(source_dir)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        logging.info(f"Übertrage: {file_path} -> {target_path}")
         if mode == 'copy':
             shutil.copy2(file_path, target_path)
         else:
             shutil.move(file_path, target_path)
+    logging.info("Synchronisation abgeschlossen.")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Synchronisiert Dateien zwischen zwei Verzeichnissen basierend auf SHA-256 Hashwerten.")
@@ -115,9 +78,5 @@ if __name__ == '__main__':
         logging.error("Eines der angegebenen Verzeichnisse existiert nicht.")
         sys.exit(1)
 
-    try:
-        operation_mode = 'move' if args.move else 'copy'
-        sync_directories(args.source, args.target, operation_mode)
-    except Exception as e:
-        logging.error(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
-        sys.exit(1)
+    operation_mode = 'move' if args.move else 'copy'
+    sync_directories(args.source, args.target, operation_mode)
