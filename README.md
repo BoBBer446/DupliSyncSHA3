@@ -42,13 +42,13 @@ Um Dateien zwischen Verzeichnissen zu synchronisieren:
 
 ```bash
 # Für das Verschieben von Dateien
-python sync_files.py <Quellverzeichnis> <Zielverzeichnis> --move
+python3 sync_files.py <Quellverzeichnis> <Zielverzeichnis> --move
 
 # Für das Kopieren von Dateien
-python sync_files.py <Quellverzeichnis> <Zielverzeichnis> --copy
+python3 sync_files.py <Quellverzeichnis> <Zielverzeichnis> --copy
 
 # Um zu prüfen, ob Duplikate im Zielverzeichnis vorhanden sind
-python sync_files.py <Quellverzeichnis> <Zielverzeichnis> --compare
+python3 sync_files.py <Quellverzeichnis> <Zielverzeichnis> --compare
 ```
 
 ## Lizenz
