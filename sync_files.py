@@ -30,6 +30,9 @@ def hash_files(file_paths):
 def sync_directories(source, target, mode, compare_only=False):
     source_dir = Path(source)
     target_dir = Path(target)
+    transferred_files = 0
+    skipped_files = 0
+    remaining_files = 0
 
     logging.info("Hashing der Dateien im Quellverzeichnis mit SHA-3...")
     source_hashes = hash_files([file for file in source_dir.rglob('*') if file.is_file()])
@@ -44,19 +47,28 @@ def sync_directories(source, target, mode, compare_only=False):
         return
 
     files_to_copy = [file for file, hash_val in source_hashes.items() if hash_val and hash_val not in target_hashes]
+    skipped_files = len(source_hashes) - len(files_to_copy)
+
     if not files_to_copy:
         logging.info("Keine Dateien zu übertragen.")
-        return
+    else:
+        logging.info("Übertrage Dateien...")
+        for file_path in tqdm(files_to_copy, desc="Dateien übertragen", unit="file"):
+            target_path = target_dir / file_path.relative_to(source_dir)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            if mode == 'copy':
+                shutil.copy2(file_path, target_path)
+                transferred_files += 1
+            else:
+                shutil.move(file_path, target_path)
+                transferred_files += 1
 
-    logging.info("Übertrage Dateien...")
-    for file_path in tqdm(files_to_copy, desc="Dateien übertragen", unit="file"):
-        target_path = target_dir / file_path.relative_to(source_dir)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        if mode == 'copy':
-            shutil.copy2(file_path, target_path)
-        else:
-            shutil.move(file_path, target_path)
+    # Zähle verbleibende Dateien im Quellverzeichnis
+    remaining_files = len(list(source_dir.rglob('*')))
     logging.info("Synchronisation abgeschlossen.")
+    logging.info(f"{transferred_files} Datei(en) {mode}iert.")
+    logging.info(f"{skipped_files} Datei(en) übersprungen.")
+    logging.info(f"{remaining_files} Datei(en) verbleiben im Quellverzeichnis.")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Synchronisiert Dateien zwischen zwei Verzeichnissen basierend auf SHA-3 Hashwerten.")
